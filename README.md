@@ -15,12 +15,15 @@ Please make sure the version compatibility with the Asynq package you are using.
 
 | Asynq version  | WebUI (asynqmon) version |
 | -------------- | ------------------------ |
+| 0.25.1, 0.26.0 | This fork (compatibility testing required) |
 | 0.23.x         | 0.7.x                    |
 | 0.22.x         | 0.6.x                    |
 | 0.20.x, 0.21.x | 0.5.x                    |
 | 0.19.x         | 0.4.x                    |
 | 0.18.x         | 0.2.x, 0.3.x             |
 | 0.16.x, 0.17.x | 0.1.x                    |
+
+The fork builds against **Asynq v0.26.0**. It is intended to inspect queues written by v0.25.1 workers too, but this cross-version scenario must pass integration testing against an isolated Redis instance before production use. For production monitoring, start with `--read-only` and use restricted Redis permissions where practical.
 
 ## Install the binary
 
@@ -49,7 +52,7 @@ docker pull hibiken/asynqmon[:tag]
 
 ### Building from source
 
-To build Asynqmon from source code, make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.16` or higher is required. You also need [Node.js](https://nodejs.org/) and [Yarn](https://yarnpkg.com/) installed in order to build the frontend assets.
+To build Asynqmon from source code, make sure you have Go installed ([download](https://golang.org/dl/)). Go `1.24` or higher is required for this fork, because Asynq v0.26.0 requires Go 1.24. You also need [Node.js](https://nodejs.org/) and [Yarn](https://yarnpkg.com/) installed in order to build the frontend assets.
 
 Download the source code of this repository and then run:
 
