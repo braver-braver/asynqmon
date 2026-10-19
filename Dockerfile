@@ -5,6 +5,8 @@
 
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /static
+# Required by legacy frontend dependencies when building with OpenSSL 3.
+ENV NODE_OPTIONS=--openssl-legacy-provider
 COPY ui .
 RUN yarn install --frozen-lockfile --non-interactive && yarn build
 
