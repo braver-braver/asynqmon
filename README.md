@@ -15,12 +15,15 @@ Please make sure the version compatibility with the Asynq package you are using.
 
 | Asynq version  | WebUI (asynqmon) version |
 | -------------- | ------------------------ |
+| 0.25.1, 0.26.0 | This fork (compatibility testing required) |
 | 0.23.x         | 0.7.x                    |
 | 0.22.x         | 0.6.x                    |
 | 0.20.x, 0.21.x | 0.5.x                    |
 | 0.19.x         | 0.4.x                    |
 | 0.18.x         | 0.2.x, 0.3.x             |
 | 0.16.x, 0.17.x | 0.1.x                    |
+
+The fork builds against **Asynq v0.26.0**. It is intended to inspect queues written by v0.25.1 workers too, but this cross-version scenario must pass integration testing against an isolated Redis instance before production use. For production monitoring, start with `--read-only` and use restricted Redis permissions where practical.
 
 ## Install the binary
 
@@ -33,11 +36,21 @@ There're a few options to install the binary:
 
 ### Release binaries
 
-You can download the release binary for your system from the [releases page](https://github.com/hibiken/asynqmon/releases).
+Download the archive for your machine from this fork's [GitHub Releases](https://github.com/braver-braver/asynqmon/releases):
+
+| Platform | Archive suffix | Executable |
+| --- | --- | --- |
+| macOS Apple Silicon | `darwin_arm64.tar.gz` | `asynqmon` |
+| Linux x64 | `linux_amd64.tar.gz` | `asynqmon` |
+| Windows x64 | `windows_amd64.zip` | `asynqmon.exe` |
+
+Each archive includes the web UI inside the executable, plus the license and README. Go, Node.js and Docker are not needed to run it. Verify the download against `checksums.txt`, extract it and start with `./asynqmon --read-only` (PowerShell: `.\asynqmon.exe --read-only`). Open <http://localhost:8080>. Use `--help` for Redis connection options. macOS binaries are unsigned and not notarized.
+
+Tags matching `v*` run tests against Asynq v0.25.1 and v0.26.0, CodeQL, a locked frontend build, and native archive smoke checks on all three platforms before uploading Release assets. Tags with a prerelease suffix create a GitHub prerelease. PRs and manual workflow runs build the same archives as Actions artifacts without publishing. Existing published Releases can also trigger asset builds.
 
 ### Docker image
 
-To pull the Docker image:
+The following images are published by upstream and do not include this fork's changes. To pull an upstream Docker image:
 
 ```bash
 # Pull the latest image
@@ -49,7 +62,7 @@ docker pull hibiken/asynqmon[:tag]
 
 ### Building from source
 
-To build Asynqmon from source code, make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.16` or higher is required. You also need [Node.js](https://nodejs.org/) and [Yarn](https://yarnpkg.com/) installed in order to build the frontend assets.
+To build Asynqmon from source code, make sure you have Go installed ([download](https://golang.org/dl/)). Go `1.24` or higher is required for this fork, because Asynq v0.26.0 requires Go 1.24. You also need [Node.js](https://nodejs.org/) and [Yarn](https://yarnpkg.com/) installed in order to build the frontend assets.
 
 Download the source code of this repository and then run:
 
@@ -58,6 +71,8 @@ make build
 ```
 
 The `asynqmon` binary should be created in the current directory.
+
+Docker CI builds without registry credentials. Publishing from this fork requires the repository variable `DOCKER_PUBLISH=true`, `DOCKER_IMAGE` for the target image (defaults to this repository), and the `DOCKER_USERNAME`/`DOCKER_PASSWORD` secrets.
 
 ### Building Docker image locally
 

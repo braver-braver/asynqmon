@@ -1,54 +1,148 @@
 name: Release
 
 on:
+  pull_request:
+    branches: [master]
+  push:
+    tags: ["v*"]
   release:
-    types:
-      - created
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  tests:
+    uses: ./.github/workflows/go-compatibility.yml
+  security:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: ./.github/workflows/codeql-analysis.yml
+  frontend:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [darwin, linux, windows]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
-
-      - name: Set up Node
-        uses: actions/setup-node@v2
-        with:
-          node-version: "12"
-
-      - name: Get release
-        id: release
-        uses: bruceadams/get-release@v1.2.2
+          node-version: '22'
+      - run: npm install --global yarn@1.22.22
+      - name: Build embedded web UI from locked dependencies
+        working-directory: ui
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Install NPM packages
-        run: cd ui && rm yarn.lock && yarn install
-
-      - name: Build Release Binary
+          NODE_OPTIONS: --openssl-legacy-provider
         run: |
-          GOOS=${{ matrix.goos }} GOARCH=amd64 make build
-          tar -czvf asynqmon_${{ steps.release.outputs.tag_name }}_${{ matrix.goos }}_amd64.tar.gz asynqmon
-          ls
-
-      - name: Upload Release Binary
-        id: upload-go-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          yarn install --frozen-lockfile --non-interactive
+          yarn build
+          test -s build/index.html
+      - uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ steps.release.outputs.upload_url }}
-          asset_path: ./asynqmon_${{ steps.release.outputs.tag_name }}_${{ matrix.goos }}_amd64.tar.gz
-          asset_name: asynqmon_${{ steps.release.outputs.tag_name }}_${{ matrix.goos }}_amd64.tar.gz
-          asset_content_type: application/gzip
+          name: frontend
+          path: ui/build/
+          if-no-files-found: error
+  binaries:
+    needs: [tests, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            goos: darwin
+            goarch: arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Remove stale embedded UI
+        run: rm -rf ui/build
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend
+          path: ui/build
+      - name: Build standalone executable and archive
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          BUILD_REF: ${{ github.ref_name }}
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          version="$BUILD_SHA"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then version="$BUILD_REF"; fi
+          name="asynqmon_${version}_${GOOS}_${GOARCH}"
+          binary=asynqmon
+          if [[ "$GOOS" == windows ]]; then binary=asynqmon.exe; fi
+          mkdir -p dist/package
+          go build -mod=readonly -trimpath -ldflags='-s -w' -o "dist/package/$binary" ./cmd/asynqmon
+          cp LICENSE README.md dist/package/
+          if [[ "$GOOS" == windows ]]; then
+            7z a "dist/$name.zip" ./dist/package/*
+            7z x "dist/$name.zip" -odist/smoke
+          else
+            tar -czf "dist/$name.tar.gz" -C dist/package .
+            mkdir -p dist/smoke
+            tar -xzf "dist/$name.tar.gz" -C dist/smoke
+          fi
+          # The existing CLI exits 2 for --help. Run the unpacked executable.
+          set +e
+          "./dist/smoke/$binary" --help > dist/help.txt 2>&1
+          code=$?
+          set -e
+          test "$code" -eq 2
+          grep -q -- '-read-only' dist/help.txt
+          grep -q -- '-redis-addr' dist/help.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+  publish:
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+    needs: [tests, security, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: dist
+      - name: Publish verified archives and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
+          cd dist
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 3
+          sha256sum ./*.tar.gz ./*.zip > checksums.txt
+          sha256sum -c checksums.txt
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            extra=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then extra+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes "${extra[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" ./*.tar.gz ./*.zip checksums.txt --clobber
