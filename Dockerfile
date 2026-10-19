@@ -25,7 +25,7 @@ RUN yarn install && yarn build
 # Building a backend.
 #
 
-FROM golang:1.18-alpine AS backend
+FROM golang:1.24-alpine AS backend
 
 # Move to a working directory (/build).
 WORKDIR /build
@@ -41,7 +41,7 @@ COPY . .
 COPY --from=frontend ["/static/build", "ui/build"]
 
 # Set necessary environmet variables needed for the image and build the server.
-ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+ENV CGO_ENABLED=0 GOOS=linux
 
 # Run go build (with ldflags to reduce binary size).
 RUN go build -ldflags="-s -w" -o asynqmon ./cmd/asynqmon
