@@ -36,11 +36,21 @@ There're a few options to install the binary:
 
 ### Release binaries
 
-You can download the release binary for your system from the [releases page](https://github.com/hibiken/asynqmon/releases).
+Download the archive for your machine from this fork's [GitHub Releases](https://github.com/braver-braver/asynqmon/releases):
+
+| Platform | Archive suffix | Executable |
+| --- | --- | --- |
+| macOS Apple Silicon | `darwin_arm64.tar.gz` | `asynqmon` |
+| Linux x64 | `linux_amd64.tar.gz` | `asynqmon` |
+| Windows x64 | `windows_amd64.zip` | `asynqmon.exe` |
+
+Each archive includes the web UI inside the executable, plus the license and README. Go, Node.js and Docker are not needed to run it. Verify the download against `checksums.txt`, extract it and start with `./asynqmon --read-only` (PowerShell: `.\asynqmon.exe --read-only`). Open <http://localhost:8080>. Use `--help` for Redis connection options. macOS binaries are unsigned and not notarized.
+
+Tags matching `v*` run tests against Asynq v0.25.1 and v0.26.0, CodeQL, a locked frontend build, and native archive smoke checks on all three platforms before uploading Release assets. Tags with a prerelease suffix create a GitHub prerelease. PRs and manual workflow runs build the same archives as Actions artifacts without publishing. Existing published Releases can also trigger asset builds.
 
 ### Docker image
 
-To pull the Docker image:
+The following images are published by upstream and do not include this fork's changes. To pull an upstream Docker image:
 
 ```bash
 # Pull the latest image
@@ -61,6 +71,8 @@ make build
 ```
 
 The `asynqmon` binary should be created in the current directory.
+
+Docker CI builds without registry credentials. Publishing from this fork requires the repository variable `DOCKER_PUBLISH=true`, `DOCKER_IMAGE` for the target image (defaults to this repository), and the `DOCKER_USERNAME`/`DOCKER_PASSWORD` secrets.
 
 ### Building Docker image locally
 

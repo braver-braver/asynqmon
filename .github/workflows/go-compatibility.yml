@@ -5,6 +5,10 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -17,13 +21,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version-file: go.mod
           cache: true
+      - name: Verify committed modules
+        run: |
+          go mod tidy -go=1.24.0
+          git diff --exit-code -- go.mod go.sum
+          go mod verify
       - name: Use Asynq version under test
+        if: matrix.asynq-version != 'v0.26.0'
         run: |
           go mod edit -require=github.com/hibiken/asynq@${{ matrix.asynq-version }}
-          go mod tidy
+          go mod tidy -go=1.24.0
       - name: Test
-        run: go test ./...
+        run: go test -mod=readonly -race ./...
+      - name: Vet
+        run: go vet -mod=readonly ./...
       - name: Build
-        run: go build ./cmd/asynqmon
+        run: go build -mod=readonly ./cmd/asynqmon
