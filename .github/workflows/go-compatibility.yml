@@ -1,0 +1,29 @@
+name: Go compatibility
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        asynq-version: ["v0.25.1", "v0.26.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+      - name: Use Asynq version under test
+        run: |
+          go mod edit -require=github.com/hibiken/asynq@${{ matrix.asynq-version }}
+          go mod tidy
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./cmd/asynqmon
