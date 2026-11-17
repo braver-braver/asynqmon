@@ -1,44 +1,40 @@
-name: Publish Docker image
+name: Docker build
+
 on:
   push:
-    branches:
-      - "master"
-    tags:
-      - "v*"
+    branches: [master]
+    tags: ["v*"]
   pull_request:
-    branches:
-      - "master"
+    branches: [master]
+
+permissions:
+  contents: read
+
 jobs:
-  push_to_registry:
-    name: Push Docker image to Docker Hub
+  docker:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      - name: Docker meta
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/metadata-action@v5
         id: meta
-        uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: hibiken/asynqmon
+          images: ${{ vars.DOCKER_IMAGE || github.repository }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request' && vars.DOCKER_PUBLISH == 'true'
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
+      - name: Build (publish only when explicitly configured)
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' && vars.DOCKER_PUBLISH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
